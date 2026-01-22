@@ -3,9 +3,9 @@
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
 ![Streamlit](https://img.shields.io/badge/Streamlit-Framework-red)
 ![Azure](https://img.shields.io/badge/Cloud-Azure%20SQL-0078D4)
-![License](https://img.shields.io/badge/License-MIT-green)
 
-**Live Demo:** [Insert Your Streamlit App Link Here]
+
+**Live Demo:** [https://nbawinprobabilitydashboard-dilmbos42xkoivkaeajfzk.streamlit.app/]
 
 ## Features
 - **Historical Simulation:** Replays 2018-19 NBA games play-by-play to visualize win probability evolution.
