@@ -132,7 +132,7 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("### 👨‍💻 Created by Brian")
 st.sidebar.info(
     """
-    **Data Scientist & Engineer** [LinkedIn](https://www.linkedin.com/) | [GitHub](https://github.com/)
+    **Data Scientist & Engineer** [LinkedIn](https://www.linkedin.com/in/brianpjoness//) | [GitHub](https://github.com/brianpjoness)
     """
 )
 
