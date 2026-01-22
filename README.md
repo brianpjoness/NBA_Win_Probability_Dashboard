@@ -1,30 +1,51 @@
+# NBA Win Probability Predictor
 
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue)
+![Streamlit](https://img.shields.io/badge/Streamlit-Framework-red)
+![Azure](https://img.shields.io/badge/Cloud-Azure%20SQL-0078D4)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-
-# NBA Live Win Probability Pipeline
-
-## Project Overview
-Predicts the probability of the home team winning NBA games using an end-to-end ETL + ML + Azure pipeline.
+**Live Demo:** [Insert Your Streamlit App Link Here]
 
 ## Features
-- Extracts historical and live NBA data
-- Transforms and cleans data for ML
-- Trains an XGBoost model to predict win probability
-- Serves predictions via interactive dashboard (Flask / Dash)
-- Hosted and automated in Azure
+- **Historical Simulation:** Replays 2018-19 NBA games play-by-play to visualize win probability evolution.
+- **Context-Aware ML Engine:** Predicts win likelihood based on score margin and time remaining using Random Forest and Logistic Regression.
+- **Dynamic Visualization:** Renders interactive momentum charts with Altair that update in real-time.
+- **Automated ETL:** Ingests raw play-by-play data, reconstructs scoreboards, and identifies teams automatically.
+- **Hybrid Cloud Architecture:** leveraged Microsoft Azure SQL for storage and Streamlit Cloud for the frontend interface.
 
 ## Architecture
-1. **ETL Pipeline:** Extract → Transform → Load into Azure SQL
-2. **ML Model:** Predict home team win probability, saved to Azure Blob Storage
-3. **Dashboard:** Live predictions with stats, hosted on Azure App Service
-4. **Automation:** Azure Functions refresh data & retrain model
+1. **ETL Pipeline:** Extracts raw CSV data, transforms margin/time features, and loads clean game states into Azure SQL.
+2. **ML Model:** Trains and compares classifiers (Random Forest vs. Logistic Regression) to optimize accuracy; serializes the best model.
+3. **Frontend Dashboard:** Connects to Azure SQL via pymssql to fetch game data and perform real-time inference.
+4. **Deployment:** Hosted on Streamlit Cloud with secure secret management for database credentials.
 
 ## Tech Stack
-Python, Pandas, NumPy, XGBoost, scikit-learn, Flask/Dash, Docker, Azure SQL, Azure App Service, Azure Functions
+**Python, Streamlit, Altair, scikit-learn, pandas, Microsoft Azure SQL, pymssql, joblib**
+
+## Repository Structure
+- `app.py`: Main application entry point and dashboard logic.
+- `ingest_v6_teams.py`: Data transformation script for cleaning and uploading raw data.
+- `train_model_rf.py`: Model training pipeline and comparison logic.
+- `requirements.txt`: Python dependencies for cloud deployment.
 
 ## How to Run
-1. Clone repo
-2. Install dependencies
-3. Configure Azure credentials
-4. Run ETL pipeline
-5. Launch dashboard
+1. **Clone the repository**
+   ```bash
+   git clone [https://github.com/brianpjoness/nba-win-probability.git](https://github.com/brianpjoness/nba-win-probability.git)
+   cd nba-win-probability
+   
+2. **Install dependencies**
+pip install -r requirements.txt
+
+3. *Configure Secrets Create a .streamlit/secrets.toml file in the root directory:*
+[secrets]
+DB_SERVER = "your-server.database.windows.net"
+DB_DATABASE = "nba_db"
+DB_USERNAME = "your_username"
+DB_PASSWORD = "your_password"
+
+4. *Run the Dashboard*
+streamlit run app.py
+
+Created by Brian Jones | Data Scientist & Engineer 
