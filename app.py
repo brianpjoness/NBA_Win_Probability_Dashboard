@@ -11,7 +11,7 @@ SERVER = st.secrets["DB_SERVER"]
 DATABASE = st.secrets["DB_DATABASE"]
 USERNAME = st.secrets["DB_USERNAME"]
 PASSWORD = st.secrets["DB_PASSWORD"]
-DRIVER = '{ODBC Driver 18 for SQL Server}'
+DRIVER = '{ODBC Driver 17 for SQL Server}'   # changed it to driver 17 for the streamlit cloud server
 
 # --- NBA TEAMS DICTIONARY ---
 NBA_TEAMS = {
