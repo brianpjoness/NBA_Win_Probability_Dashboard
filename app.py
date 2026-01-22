@@ -31,17 +31,17 @@ st.set_page_config(page_title="NBA AI Predictor", page_icon="🏀", layout="wide
 
 
 # --- DATABASE & MODEL ---
+# --- DATABASE & MODEL ---
 def get_db_connection():
-    # Driver 18 requires the port to be part of the SERVER string (server,1433)
+    # FreeTDS Connection String for Azure SQL
     conn_str = (
-        f'DRIVER={DRIVER};'
-        f'SERVER={SERVER},1433;' 
+        'DRIVER={FreeTDS};'
+        f'SERVER={SERVER};'
+        'PORT=1433;'
         f'DATABASE={DATABASE};'
         f'UID={USERNAME};'
-        f'PWD={PASSWORD};'
-        'Encrypt=yes;'
-        'TrustServerCertificate=yes;'
-        'Connection Timeout=30;'
+        f'PWD={{{PASSWORD}}};'  # Triple brackets escape the password safely
+        'TDS_Version=8.0;'      # Required for Azure SQL
     )
     return pyodbc.connect(conn_str)
 
