@@ -32,9 +32,8 @@ st.set_page_config(page_title="NBA AI Predictor", page_icon="🏀", layout="wide
 
 # --- DATABASE & MODEL ---
 def get_db_connection():
-    # pymssql connection (Works on Cloud & Local)
     return pymssql.connect(
-        server=server,
+        server=f"{server}:1433",  # <--- Add the port here explicitly
         user=username,
         password=password,
         database=database
