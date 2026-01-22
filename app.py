@@ -32,6 +32,7 @@ st.set_page_config(page_title="NBA AI Predictor", page_icon="🏀", layout="wide
 
 # --- DATABASE & MODEL ---
 def get_db_connection():
+    """Establish connection to Azure SQL Database using pymssql."""
     return pymssql.connect(
         server=f"{server}:1433",
         user=username,
@@ -42,6 +43,7 @@ def get_db_connection():
 
 @st.cache_resource
 def load_model():
+    """Load the trained machine learning model from disk."""
     if os.path.exists('nba_win_probability_model.pkl'):
         return joblib.load('nba_win_probability_model.pkl')
     return None
@@ -52,6 +54,7 @@ model = load_model()
 
 @st.cache_data(ttl=600)
 def get_available_games():
+    """Fetch list of available games from the database."""
     conn = get_db_connection()
     # Get a list of games with team IDs
     query = """
@@ -74,6 +77,7 @@ def get_available_games():
 
 @st.cache_data(ttl=600)
 def get_game_data(game_id):
+    """Fetch play-by-play data for a specific game."""
     conn = get_db_connection()
     query = f"""
         SELECT TimeRemainingSec, HomeScore, AwayScore, Quarter, HomeTeamID, AwayTeamID 
@@ -88,7 +92,7 @@ def get_game_data(game_id):
 
 # --- HELPER: FORMAT TIME FOR GRAPH ---
 def format_time_label(seconds_remaining):
-    """Converts 720 -> 'Q4 12:00'"""
+    """Converts total seconds remaining into Quarter and Clock format (e.g., Q4 12:00)."""
     if seconds_remaining > 2160:
         q = "Q1"
     elif seconds_remaining > 1440:
@@ -109,7 +113,7 @@ def format_time_label(seconds_remaining):
 # --- UI START ---
 st.title("🏀 NBA Win Probability")
 
-# ℹ️ NEW: Expander explaining the logic
+# Expander explaining the logic
 with st.expander("ℹ️ How does this model work?"):
     st.write("""
     This application uses a **Random Forest Classifier** trained on over **500,000 historical NBA plays**.
@@ -127,9 +131,9 @@ selected_game_id = game_dict[selected_label]
 speed = st.sidebar.slider("Replay Speed", 0.01, 1.0, 0.05)
 start_btn = st.sidebar.button("▶️ Start Replay")
 
-# ℹ️ NEW: Sidebar Footer (Bio)
+# Sidebar Footer (Bio)
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 👨‍💻 Created by Brian")
+st.sidebar.markdown("###  Created by Brian Jones")
 st.sidebar.info(
     """
     **Data Scientist & Engineer** [LinkedIn](https://www.linkedin.com/in/brianpjoness) | [GitHub](https://github.com/brianpjoness)
@@ -138,7 +142,7 @@ st.sidebar.info(
 
 st.divider()
 
-# We initialize the chart placeholder outside to keep it persistent
+# Initialize the chart placeholder outside to keep it persistent
 chart_placeholder = st.empty()
 
 if start_btn:
@@ -150,11 +154,11 @@ if start_btn:
     home_name = NBA_TEAMS.get(h_id, "Home")
     away_name = NBA_TEAMS.get(a_id, "Away")
 
-    # ℹ️ NEW: Generate Dynamic Logo URLs
+    # Generate Dynamic Logo URLs
     home_logo_url = f"https://cdn.nba.com/logos/nba/{h_id}/global/L/logo.svg"
     away_logo_url = f"https://cdn.nba.com/logos/nba/{a_id}/global/L/logo.svg"
 
-    # ℹ️ NEW: Layout setup INSIDE the button so we can draw logos first
+    # Layout setup inside the button to draw logos first
     col1, col2, col3 = st.columns([1, 2, 1])  # Ratios: Middle column wider for the metric
 
     with col1:
@@ -188,11 +192,11 @@ if start_btn:
             prob = 0.5
 
         # Update Metrics
-        # ℹ️ NEW: We update the empty placeholders we created above
+        # Update the empty placeholders created above
         home_metric.metric(home_name, h_score)
         away_metric.metric(away_name, a_score)
 
-        # ℹ️ NEW: Detailed probability metric
+        # Detailed probability metric
         prob_metric.metric(
             f"{home_name} Win Probability",
             f"{prob:.1%}",
@@ -236,8 +240,8 @@ if start_btn:
     chart_placeholder.altair_chart(chart + rules, use_container_width=True)
 
     if final_margin > 0:
-        st.success(f"🏁 FINAL: {home_name} Wins!")
+        st.success(f"  FINAL: {home_name} Wins!")
         prob_metric.metric(f"{home_name} Win %", "100.0%", delta="Winner")
     else:
-        st.error(f"🏁 FINAL: {away_name} Wins!")
+        st.error(f"  FINAL: {away_name} Wins!")
         prob_metric.metric(f"{home_name} Win %", "0.0%", delta="Loser")
