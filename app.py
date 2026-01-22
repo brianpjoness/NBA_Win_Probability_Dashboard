@@ -7,10 +7,10 @@ import pyodbc
 import altair as alt
 
 # --- CONFIGURATION ---
-server = st.secrets["DB_SERVER"]
-database = st.secrets["DB_DATABASE"]
-username = st.secrets["DB_USERNAME"]
-password = st.secrets["DB_PASSWORD"]
+SERVER = st.secrets["DB_SERVER"]
+DATABASE = st.secrets["DB_DATABASE"]
+USERNAME = st.secrets["DB_USERNAME"]
+PASSWORD = st.secrets["DB_PASSWORD"]
 DRIVER = '{ODBC Driver 18 for SQL Server}'
 
 # --- NBA TEAMS DICTIONARY ---
