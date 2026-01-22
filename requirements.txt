@@ -3,6 +3,6 @@ pandas
 numpy
 scikit-learn
 joblib
-pyodbc
 altair
 nba_api
+pymssql

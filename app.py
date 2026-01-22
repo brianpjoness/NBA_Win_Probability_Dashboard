@@ -3,15 +3,15 @@ import pandas as pd
 import time
 import joblib
 import os
-import pyodbc
+import pymssql  # <--- NEW LIBRARY
 import altair as alt
 
 # --- CONFIGURATION ---
-SERVER = st.secrets["DB_SERVER"]
-DATABASE = st.secrets["DB_DATABASE"]
-USERNAME = st.secrets["DB_USERNAME"]
-PASSWORD = st.secrets["DB_PASSWORD"]
-DRIVER = '{ODBC Driver 17 for SQL Server}'   # changed it to driver 17 for the streamlit cloud server
+# Load secrets securely
+server = st.secrets["DB_SERVER"]
+database = st.secrets["DB_DATABASE"]
+username = st.secrets["DB_USERNAME"]
+password = st.secrets["DB_PASSWORD"]
 
 # --- NBA TEAMS DICTIONARY ---
 NBA_TEAMS = {
@@ -31,19 +31,14 @@ st.set_page_config(page_title="NBA AI Predictor", page_icon="🏀", layout="wide
 
 
 # --- DATABASE & MODEL ---
-# --- DATABASE & MODEL ---
 def get_db_connection():
-    # FreeTDS Connection String for Azure SQL
-    conn_str = (
-        'DRIVER={FreeTDS};'
-        f'SERVER={SERVER};'
-        'PORT=1433;'
-        f'DATABASE={DATABASE};'
-        f'UID={USERNAME};'
-        f'PWD={{{PASSWORD}}};'  # Triple brackets escape the password safely
-        'TDS_Version=8.0;'      # Required for Azure SQL
+    # pymssql connection (Works on Cloud & Local)
+    return pymssql.connect(
+        server=server,
+        user=username,
+        password=password,
+        database=database
     )
-    return pyodbc.connect(conn_str)
 
 
 @st.cache_resource
@@ -67,7 +62,7 @@ def get_available_games():
     df = pd.read_sql(query, conn)
     conn.close()
 
-    # Format labels for the dropdown (e.g., "0021800001: Celtics vs 76ers")
+    # Format labels for the dropdown
     game_options = {}
     for _, row in df.iterrows():
         h_name = NBA_TEAMS.get(row['HomeTeamID'], "Home")
@@ -95,8 +90,6 @@ def get_game_data(game_id):
 # --- HELPER: FORMAT TIME FOR GRAPH ---
 def format_time_label(seconds_remaining):
     """Converts 720 -> 'Q4 12:00'"""
-    # 2880 total seconds
-    # Q1: 2880-2160, Q2: 2160-1440, Q3: 1440-720, Q4: 720-0
     if seconds_remaining > 2160:
         q = "Q1"
     elif seconds_remaining > 1440:
@@ -106,7 +99,6 @@ def format_time_label(seconds_remaining):
     else:
         q = "Q4"
 
-    # Calculate clock within quarter
     rem_in_q = seconds_remaining % 720
     if rem_in_q == 0 and seconds_remaining > 0: rem_in_q = 720
 
@@ -137,16 +129,12 @@ chart_placeholder = st.empty()
 if start_btn:
     game_data = get_game_data(selected_game_id)
 
-    # Get Team Names
     h_id = game_data.iloc[0]['HomeTeamID']
     a_id = game_data.iloc[0]['AwayTeamID']
     home_name = NBA_TEAMS.get(h_id, "Home")
     away_name = NBA_TEAMS.get(a_id, "Away")
 
-    # Prepare Graph Data
     graph_history = pd.DataFrame(columns=["Elapsed", "Probability", "TimeLabel"])
-
-    # Process only every 5th frame for speed
     stream_data = game_data.iloc[::5].copy()
 
     for _, row in stream_data.iterrows():
@@ -155,58 +143,39 @@ if start_btn:
         a_score = row['AwayScore']
         margin = h_score - a_score
 
-        # Predict
         input_data = pd.DataFrame({'ScoreMargin': [margin], 'TimeRemainingSec': [t]})
         try:
             prob = model.predict_proba(input_data)[0][1]
         except:
             prob = 0.5
 
-        # Update Metrics
         home_metric.metric(home_name, h_score)
         away_metric.metric(away_name, a_score)
         prob_metric.metric(f"{home_name} Win %", f"{prob:.1%}", delta=f"{margin}")
 
-        # Update Graph Data
-        # X-axis: 0 to 48 minutes (Elapsed Time)
         elapsed_min = (2880 - t) / 60
         time_lbl = format_time_label(t)
 
         new_row = pd.DataFrame({
             "Elapsed": [elapsed_min],
             "Probability": [prob],
-            "TimeLabel": [time_lbl]  # For tooltip
+            "TimeLabel": [time_lbl]
         })
         graph_history = pd.concat([graph_history, new_row], ignore_index=True)
 
-        # --- ALTAIR CHART ---
-        # Defines the pretty chart
         chart = alt.Chart(graph_history).mark_line(color='#ff4b4b').encode(
             x=alt.X('Elapsed', title='Game Time (Minutes)', scale=alt.Scale(domain=[0, 48])),
             y=alt.Y('Probability', title='Win Probability', scale=alt.Scale(domain=[0, 1])),
             tooltip=['TimeLabel', alt.Tooltip('Probability', format='.1%')]
         ).properties(height=300)
 
-        # Add Quarter Lines (Vertical rules at 12, 24, 36)
         rules = alt.Chart(pd.DataFrame({'x': [12, 24, 36]})).mark_rule(color='gray', strokeDash=[5, 5]).encode(x='x')
-
         chart_placeholder.altair_chart(chart + rules, use_container_width=True)
-
         time.sleep(speed)
 
-    # --- 🆕 ADD THIS BLOCK AFTER THE LOOP FINISHES ---
-    # Force the graph to touch 0% or 100% at the very end
     final_margin = stream_data.iloc[-1]['HomeScore'] - stream_data.iloc[-1]['AwayScore']
     final_prob = 1.0 if final_margin > 0 else 0.0
-
-    # Create the 'Game Over' data point (Minute 48.0)
-    final_row = pd.DataFrame({
-        "Elapsed": [48.0],
-        "Probability": [final_prob],
-        "TimeLabel": ["FINAL"]
-    })
-
-    # Append and redraw one last time
+    final_row = pd.DataFrame({"Elapsed": [48.0], "Probability": [final_prob], "TimeLabel": ["FINAL"]})
     graph_history = pd.concat([graph_history, final_row], ignore_index=True)
 
     chart = alt.Chart(graph_history).mark_line(color='#ff4b4b').encode(
@@ -215,12 +184,8 @@ if start_btn:
         tooltip=['TimeLabel', alt.Tooltip('Probability', format='.1%')]
     ).properties(height=300)
 
-    # Add rules again
-    rules = alt.Chart(pd.DataFrame({'x': [12, 24, 36]})).mark_rule(color='gray', strokeDash=[5, 5]).encode(x='x')
-
     chart_placeholder.altair_chart(chart + rules, use_container_width=True)
 
-    # Update text to show finality
     if final_margin > 0:
         st.success(f"🏁 FINAL: {home_name} Wins!")
         prob_metric.metric(f"{home_name} Win %", "100.0%", delta="Winner")
