@@ -327,4 +327,4 @@ with tab_history:
             prob_metric.metric(f"{home_name} Win %", "100.0%", delta="Winner")
         else:
             st.error(f"  FINAL: {away_name} Wins!")
-            prob_metric.metric(f"{home_name} Win %", "0.0%", delta="Loser")
+            prob_metric.metric(f"{home_name} Win %", "0.0%", delta="Loser")   # handles end of game
