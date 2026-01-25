@@ -172,7 +172,6 @@ with tab_live:
 
     if st.button("🔄 Refresh Live Scores"):
         try:
-            # Note the capital 'B' in ScoreBoard
             board = scoreboard.ScoreBoard()
             games = board.games.get_dict()
 
@@ -180,9 +179,15 @@ with tab_live:
                 st.warning("No games found for today yet.")
 
             for game in games:
-                # 1. Parse Basic Data
+                # 1. Parse Data & Logos
                 home_team = game['homeTeam']['teamName']
+                home_id = game['homeTeam']['teamId']
+                home_logo = f"https://cdn.nba.com/logos/nba/{home_id}/global/L/logo.svg"
+
                 away_team = game['awayTeam']['teamName']
+                away_id = game['awayTeam']['teamId']
+                away_logo = f"https://cdn.nba.com/logos/nba/{away_id}/global/L/logo.svg"
+
                 h_score = game['homeTeam']['score']
                 a_score = game['awayTeam']['score']
                 period = game['period']
@@ -190,13 +195,21 @@ with tab_live:
 
                 # 2. Render Game Card
                 with st.container():
-                    st.markdown(f"### {away_team} @ {home_team}")
+                    # Layout: Away Logo | Away Name/Score | Status | Home Name/Score | Home Logo
+                    col1, col2, col3, col4, col5 = st.columns([1, 2, 2, 2, 1])
 
-                    # Layout
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Away", a_score)
-                    col2.markdown(f"**{status}**")
-                    col3.metric("Home", h_score)
+                    with col1:
+                        st.image(away_logo, width=60)
+                    with col2:
+                        st.metric(away_team, a_score)
+
+                    with col3:
+                        st.markdown(f"<h3 style='text-align: center;'>{status}</h3>", unsafe_allow_html=True)
+
+                    with col4:
+                        st.metric(home_team, h_score)
+                    with col5:
+                        st.image(home_logo, width=60)
 
                     # 3. Decision Logic
                     # CASE A: Game is Final
@@ -207,7 +220,6 @@ with tab_live:
                         else:
                             prob = 0.0
                             st.error(f"❌ FINAL: {away_team} Won")
-
                         st.progress(prob)
 
                     # CASE B: Game is Active (Live)
@@ -242,9 +254,6 @@ with tab_live:
 # ==========================================
 with tab_history:
     st.header("Game Settings")
-
-    # Move Sidebar controls for history here or keep in main sidebar
-    # For clarity, we can keep the controls in the main sidebar but specific to this tab logic
 
     game_dict = get_available_games()
     if game_dict:
