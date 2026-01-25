@@ -367,4 +367,4 @@ with tab_history:
                 st.error(f"  FINAL: {away_name} Wins!")
                 prob_metric.metric(f"{home_name} Win %", "0.0%", delta="Loser")
     else:
-        st.warning("No historical games found or database connection failed.")
+        st.warning("No historical games found or database connection failed.")   # if nothing can be found
