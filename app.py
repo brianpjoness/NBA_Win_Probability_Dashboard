@@ -5,6 +5,7 @@ import joblib
 import os
 import pymssql
 import altair as alt
+from nba_api.live.nba.endpoints import scoreboard  # New import for live data
 
 # --- CONFIGURATION ---
 # Load secrets securely
@@ -90,7 +91,7 @@ def get_game_data(game_id):
     return df
 
 
-# --- HELPER: FORMAT TIME FOR GRAPH ---
+# --- HELPERS ---
 def format_time_label(seconds_remaining):
     """Converts total seconds remaining into Quarter and Clock format (e.g., Q4 12:00)."""
     if seconds_remaining > 2160:
@@ -110,6 +111,22 @@ def format_time_label(seconds_remaining):
     return f"{q} {m}:{s:02d}"
 
 
+def parse_iso8601_time(duration_str):
+    """Parses ISO 8601 duration strings (e.g., PT10M00S) from the live API."""
+    if not duration_str: return 720
+    try:
+        import re
+        # Extract Minutes and Seconds using Regex
+        match = re.search(r'PT(\d+)M(\d+\.?\d*)S', duration_str)
+        if match:
+            mins = int(match.group(1))
+            secs = float(match.group(2))
+            return mins * 60 + int(secs)
+        return 0
+    except:
+        return 0
+
+
 # --- UI START ---
 st.title("🏀 NBA Win Probability")
 
@@ -123,97 +140,179 @@ with st.expander("ℹ️ How does this model work?"):
     * **The Output:** It calculates the precise probability of the Home Team holding onto the lead.
     """)
 
-# Sidebar
-st.sidebar.header("Game Settings")
-game_dict = get_available_games()
-selected_label = st.sidebar.selectbox("Select Game", list(game_dict.keys()))
-selected_game_id = game_dict[selected_label]
-speed = st.sidebar.slider("Replay Speed", 0.01, 1.0, 0.05)
-start_btn = st.sidebar.button("▶️ Start Replay")
-
 # Sidebar Footer (Bio)
-st.sidebar.markdown("---")
 st.sidebar.markdown("###  Created by Brian Jones")
 st.sidebar.info(
     """
     **Data Scientist & Engineer** [LinkedIn](https://www.linkedin.com/in/brianpjoness) | [GitHub](https://github.com/brianpjoness)
     """
 )
+st.sidebar.divider()
 
-st.divider()
+# --- TABS FOR NAVIGATION ---
+tab_live, tab_history = st.tabs(["🔴 Live Games", "📜 Historical Replay"])
 
-# Initialize the chart placeholder outside to keep it persistent
-chart_placeholder = st.empty()
+# ==========================================
+# TAB 1: LIVE GAMES
+# ==========================================
+with tab_live:
+    st.header("Today's Live Predictions")
 
-if start_btn:
-    game_data = get_game_data(selected_game_id)
-
-    # Get Team Names & IDs
-    h_id = game_data.iloc[0]['HomeTeamID']
-    a_id = game_data.iloc[0]['AwayTeamID']
-    home_name = NBA_TEAMS.get(h_id, "Home")
-    away_name = NBA_TEAMS.get(a_id, "Away")
-
-    # Generate Dynamic Logo URLs
-    home_logo_url = f"https://cdn.nba.com/logos/nba/{h_id}/global/L/logo.svg"
-    away_logo_url = f"https://cdn.nba.com/logos/nba/{a_id}/global/L/logo.svg"
-
-    # Layout setup inside the button to draw logos first
-    col1, col2, col3 = st.columns([1, 2, 1])  # Ratios: Middle column wider for the metric
-
-    with col1:
-        st.image(home_logo_url, width=80)
-        home_metric = st.empty()  # Placeholder for score
-
-    with col2:
-        st.write("")  # Spacer
-        st.write("")
-        prob_metric = st.empty()  # Placeholder for probability
-
-    with col3:
-        st.image(away_logo_url, width=80)
-        away_metric = st.empty()  # Placeholder for score
-
-    # Prepare Graph Data
-    graph_history = pd.DataFrame(columns=["Elapsed", "Probability", "TimeLabel"])
-    stream_data = game_data.iloc[::5].copy()
-
-    for _, row in stream_data.iterrows():
-        t = row['TimeRemainingSec']
-        h_score = row['HomeScore']
-        a_score = row['AwayScore']
-        margin = h_score - a_score
-
-        # Predict
-        input_data = pd.DataFrame({'ScoreMargin': [margin], 'TimeRemainingSec': [t]})
+    if st.button("🔄 Refresh Live Scores"):
         try:
-            prob = model.predict_proba(input_data)[0][1]
-        except:
-            prob = 0.5
+            # Note the capital 'B' in ScoreBoard
+            board = scoreboard.ScoreBoard()
+            games = board.games.get_dict()
 
-        # Update Metrics
-        # Update the empty placeholders created above
-        home_metric.metric(home_name, h_score)
-        away_metric.metric(away_name, a_score)
+            if not games:
+                st.warning("No games found for today yet.")
 
-        # Detailed probability metric
-        prob_metric.metric(
-            f"{home_name} Win Probability",
-            f"{prob:.1%}",
-            delta=f"{margin} pts",
-            delta_color="normal"
-        )
+            for game in games:
+                # 1. Parse Basic Data
+                home_team = game['homeTeam']['teamName']
+                away_team = game['awayTeam']['teamName']
+                h_score = game['homeTeam']['score']
+                a_score = game['awayTeam']['score']
+                period = game['period']
+                status = game['gameStatusText']
 
-        # Update Graph Data
-        elapsed_min = (2880 - t) / 60
-        time_lbl = format_time_label(t)
+                # 2. Render Game Card
+                with st.container():
+                    st.markdown(f"### {away_team} @ {home_team}")
 
-        new_row = pd.DataFrame({
-            "Elapsed": [elapsed_min],
-            "Probability": [prob],
-            "TimeLabel": [time_lbl]
-        })
-        graph_history = pd.concat([graph_history, new_row], ignore_index=True)
+                    # Layout
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("Away", a_score)
+                    col2.markdown(f"**{status}**")
+                    col3.metric("Home", h_score)
+
+                    # 3. If Live, Predict!
+                    if "Live" in status or period >= 1:
+                        # Calculate Inputs
+                        margin = h_score - a_score  # Home Perspective
+
+                        # Parse Time (Approximate for now)
+                        clock_str = game['gameClock']  # PT10M00S
+                        seconds_left_in_q = parse_iso8601_time(clock_str)
+                        total_seconds_left = ((4 - period) * 720) + seconds_left_in_q
+                        if total_seconds_left < 0: total_seconds_left = 0
+
+                        # Predict
+                        input_df = pd.DataFrame({'ScoreMargin': [margin], 'TimeRemainingSec': [total_seconds_left]})
+                        prob = model.predict_proba(input_df)[0][1]
+
+                        st.progress(prob)
+                        st.caption(f"Home Win Probability: **{prob:.1%}**")
+
+                    st.divider()
+
+        except Exception as e:
+            st.error(f"Error fetching live data: {e}")
+
+# ==========================================
+# TAB 2: HISTORICAL REPLAY (Existing Logic)
+# ==========================================
+with tab_history:
+    st.header("Game Settings")
+
+    # Move Sidebar controls for history here or keep in main sidebar
+    # For clarity, we can keep the controls in the main sidebar but specific to this tab logic
+
+    game_dict = get_available_games()
+    selected_label = st.selectbox("Select Game", list(game_dict.keys()))
+    selected_game_id = game_dict[selected_label]
+    speed = st.slider("Replay Speed", 0.01, 1.0, 0.05)
+    start_btn = st.button("▶️ Start Replay")
+
+    # Initialize the chart placeholder inside the tab
+    chart_placeholder = st.empty()
+
+    if start_btn:
+        game_data = get_game_data(selected_game_id)
+
+        # Get Team Names & IDs
+        h_id = game_data.iloc[0]['HomeTeamID']
+        a_id = game_data.iloc[0]['AwayTeamID']
+        home_name = NBA_TEAMS.get(h_id, "Home")
+        away_name = NBA_TEAMS.get(a_id, "Away")
+
+        # Generate Dynamic Logo URLs
+        home_logo_url = f"https://cdn.nba.com/logos/nba/{h_id}/global/L/logo.svg"
+        away_logo_url = f"https://cdn.nba.com/logos/nba/{a_id}/global/L/logo.svg"
+
+        # Layout setup inside the button to draw logos first
+        col1, col2, col3 = st.columns([1, 2, 1])  # Ratios: Middle column wider for the metric
+
+        with col1:
+            st.image(home_logo_url, width=80)
+            home_metric = st.empty()  # Placeholder for score
+
+        with col2:
+            st.write("")  # Spacer
+            st.write("")
+            prob_metric = st.empty()  # Placeholder for probability
+
+        with col3:
+            st.image(away_logo_url, width=80)
+            away_metric = st.empty()  # Placeholder for score
+
+        # Prepare Graph Data
+        graph_history = pd.DataFrame(columns=["Elapsed", "Probability", "TimeLabel"])
+        stream_data = game_data.iloc[::5].copy()
+
+        for _, row in stream_data.iterrows():
+            t = row['TimeRemainingSec']
+            h_score = row['HomeScore']
+            a_score = row['AwayScore']
+            margin = h_score - a_score
+
+            # Predict
+            input_data = pd.DataFrame({'ScoreMargin': [margin], 'TimeRemainingSec': [t]})
+            try:
+                prob = model.predict_proba(input_data)[0][1]
+            except:
+                prob = 0.5
+
+            # Update Metrics
+            # Update the empty placeholders created above
+            home_metric.metric(home_name, h_score)
+            away_metric.metric(away_name, a_score)
+
+            # Detailed probability metric
+            prob_metric.metric(
+                f"{home_name} Win Probability",
+                f"{prob:.1%}",
+                delta=f"{margin} pts",
+                delta_color="normal"
+            )
+
+            # Update Graph Data
+            elapsed_min = (2880 - t) / 60
+            time_lbl = format_time_label(t)
+
+            new_row = pd.DataFrame({
+                "Elapsed": [elapsed_min],
+                "Probability": [prob],
+                "TimeLabel": [time_lbl]
+            })
+            graph_history = pd.concat([graph_history, new_row], ignore_index=True)
+
+            chart = alt.Chart(graph_history).mark_line(color='#ff4b4b').encode(
+                x=alt.X('Elapsed', title='Game Time (Minutes)', scale=alt.Scale(domain=[0, 48])),
+                y=alt.Y('Probability', title='Win Probability', scale=alt.Scale(domain=[0, 1])),
+                tooltip=['TimeLabel', alt.Tooltip('Probability', format='.1%')]
+            ).properties(height=300)
+
+            rules = alt.Chart(pd.DataFrame({'x': [12, 24, 36]})).mark_rule(color='gray', strokeDash=[5, 5]).encode(
+                x='x')
+            chart_placeholder.altair_chart(chart + rules, use_container_width=True)
+            time.sleep(speed)
+
+        # --- FINAL WHISTLE LOGIC ---
+        final_margin = stream_data.iloc[-1]['HomeScore'] - stream_data.iloc[-1]['AwayScore']
+        final_prob = 1.0 if final_margin > 0 else 0.0
+        final_row = pd.DataFrame({"Elapsed": [48.0], "Probability": [final_prob], "TimeLabel": ["FINAL"]})
+        graph_history = pd.concat([graph_history, final_row], ignore_index=True)
 
         chart = alt.Chart(graph_history).mark_line(color='#ff4b4b').encode(
             x=alt.X('Elapsed', title='Game Time (Minutes)', scale=alt.Scale(domain=[0, 48])),
@@ -221,27 +320,11 @@ if start_btn:
             tooltip=['TimeLabel', alt.Tooltip('Probability', format='.1%')]
         ).properties(height=300)
 
-        rules = alt.Chart(pd.DataFrame({'x': [12, 24, 36]})).mark_rule(color='gray', strokeDash=[5, 5]).encode(x='x')
         chart_placeholder.altair_chart(chart + rules, use_container_width=True)
-        time.sleep(speed)
 
-    # --- FINAL WHISTLE LOGIC ---
-    final_margin = stream_data.iloc[-1]['HomeScore'] - stream_data.iloc[-1]['AwayScore']
-    final_prob = 1.0 if final_margin > 0 else 0.0
-    final_row = pd.DataFrame({"Elapsed": [48.0], "Probability": [final_prob], "TimeLabel": ["FINAL"]})
-    graph_history = pd.concat([graph_history, final_row], ignore_index=True)
-
-    chart = alt.Chart(graph_history).mark_line(color='#ff4b4b').encode(
-        x=alt.X('Elapsed', title='Game Time (Minutes)', scale=alt.Scale(domain=[0, 48])),
-        y=alt.Y('Probability', title='Win Probability', scale=alt.Scale(domain=[0, 1])),
-        tooltip=['TimeLabel', alt.Tooltip('Probability', format='.1%')]
-    ).properties(height=300)
-
-    chart_placeholder.altair_chart(chart + rules, use_container_width=True)
-
-    if final_margin > 0:
-        st.success(f"  FINAL: {home_name} Wins!")
-        prob_metric.metric(f"{home_name} Win %", "100.0%", delta="Winner")
-    else:
-        st.error(f"  FINAL: {away_name} Wins!")
-        prob_metric.metric(f"{home_name} Win %", "0.0%", delta="Loser")
+        if final_margin > 0:
+            st.success(f"  FINAL: {home_name} Wins!")
+            prob_metric.metric(f"{home_name} Win %", "100.0%", delta="Winner")
+        else:
+            st.error(f"  FINAL: {away_name} Wins!")
+            prob_metric.metric(f"{home_name} Win %", "0.0%", delta="Loser")
